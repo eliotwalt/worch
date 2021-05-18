@@ -88,11 +88,17 @@ class Linear(Module):
     def backward(self, *gradwrtoutput):
         gradwrtoutput, = gradwrtoutput
         w_gradient = torch.mm(gradwrtoutput.T, self.last_input)
-        self.params[0].grad = w_gradient
+        if self.params[0].grad is None:
+            self.params[0].grad = w_gradient
+        else:
+            self.params[0].grad += w_gradient
         if self.use_bias:
             b_gradient = torch.sum(gradwrtoutput, axis=0)
             # print(self.params[1].shape, b_gradient.shape)
-            self.params[1].grad = b_gradient
+            if self.params[1].grad is None:
+                self.params[1].grad = b_gradient
+            else:
+                self.params[1].grad += b_gradient
         # print('--------------------------------------------')
         # print('linear gradwrtoutput: ',gradwrtoutput.shape)
         # print('linear lastinput: ',self.last_input.shape)
@@ -185,13 +191,14 @@ class MSELoss(Module):
 
     def forward(self, input, target):
         target = target.reshape(input.shape) # just in case
-        self.last_input = [input, target]
+        if self.training:
+            self.last_input = [input, target]
         agg = torch.pow(input-target, 2)
         return torch.mean(agg)
 
     def backward(self):
         '''loss function => no gradwrtoutput'''
-        gradwrtinput = 2*(self.last_input[0]-self.last_input[1])
+        gradwrtinput = (self.last_input[0]-self.last_input[1])*0.5
         # print('--------------------------------------------')
         # print('mse lastinput[input]: ',self.last_input[0].shape)
         # print('mse lastinput[target]: ',self.last_input[1].shape)
@@ -212,6 +219,9 @@ class Sequential(Module):
             assert isinstance(module, Module), '`modules` must contain only Module objects'
             module.register_previous_module(previous_module)
             self.params.extend(module.params)
+        
+    def __getitem__(self, idx):
+        return self.module_list[idx]
 
     def forward(self, *input):
         x, = input
@@ -219,7 +229,7 @@ class Sequential(Module):
             x = module(x)
         return x
     
-    def backward(self, *gradwrtoutput):
+    def backward(self, gradwrtoutput):
         last_module = self.module_list[-1]
         return last_module.backward(gradwrtoutput)
 

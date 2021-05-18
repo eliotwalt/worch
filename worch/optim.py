@@ -25,4 +25,6 @@ class SGD(Optimizer):
 
     def step(self):
         for w in self.parameters:
+            # print('\n\n\n')
+            # print(w.grad)
             w -= self.lr * w.grad
