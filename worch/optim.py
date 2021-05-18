@@ -15,7 +15,7 @@ class Optimizer(object):
 
     def zero_grad(self):
         for w in self.parameters:
-            w.grad = torch.zeros_like(w)
+            w.grad = None
 
 class SGD(Optimizer):
 
@@ -25,6 +25,4 @@ class SGD(Optimizer):
 
     def step(self):
         for w in self.parameters:
-            # print('\n\n\n')
-            # print(w.grad)
             w -= self.lr * w.grad

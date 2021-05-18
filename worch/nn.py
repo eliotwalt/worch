@@ -1,12 +1,6 @@
 import torch
 torch.set_grad_enabled(False)
 
-'''
-Todo:
-- fix gpu
-- loss(model=model) ?
-'''
-
 class Module(object):
 
     '''
@@ -79,10 +73,16 @@ class Linear(Module):
     def forward(self, *input):
         if self.training:
             self.last_input, = input
-        x = self.last_input.clone()
+            x = self.last_input.clone()
+        else:
+            x, = input
+        # print('x',x.shape)
         y = torch.mm(x, self.params[0].T)
+        # print('wT',self.params[0].T.shape)
         if self.use_bias:
             y = y + self.params[1]
+        # print('y',y.shape)
+        # print()
         return y
 
     def backward(self, *gradwrtoutput):
@@ -107,6 +107,7 @@ class Linear(Module):
         gradwrtinput = torch.mm(gradwrtoutput, self.params[0])
         # print('linear gradwrtinput: ', gradwrtinput.shape)
         # print('--------------------------------------------')
+        self.last_input = None
         
         return self.propagate_gradient(gradwrtinput)
 
@@ -122,7 +123,9 @@ class ReLU(Module):
     def forward(self, *input):
         if self.training:
             self.last_input, = input
-        x = self.last_input.clone()
+            x = self.last_input.clone()
+        else:
+            x, = input
         return torch.clamp(x, min=0)
 
     def backward(self, *gradwrtoutput):
@@ -134,6 +137,7 @@ class ReLU(Module):
         gradwrtinput[self.last_input < 0] = 0
         # print('relu gradwrtinput: ', gradwrtinput.shape)
         # print('--------------------------------------------')
+        self.last_input = None
         return self.propagate_gradient(gradwrtinput)
 
 class Sigmoid(Module):
@@ -144,7 +148,9 @@ class Sigmoid(Module):
     def forward(self, *input):
         if self.training:
             self.last_input, = input
-        x = self.last_input.clone()
+            x = self.last_input.clone()
+        else:
+            x, = input
         mask = torch.zeros_like(x)
         positives = torch.where(x>=0, x, mask)
         negatives = torch.where(x<0, x, mask)
@@ -165,6 +171,7 @@ class Sigmoid(Module):
         gradwrtoutput, = gradwrtoutput
         output_sigmoid = self.forward(self.last_input)
         gradwrtinput = (output_sigmoid*(1-output_sigmoid))*gradwrtoutput
+        self.last_input = None
         return self.propagate_gradient(gradwrtinput)
 
 class Tanh(Module):
@@ -175,13 +182,16 @@ class Tanh(Module):
     def forward(self, *input):
         if self.training:
             self.last_input, = input
-        x = self.last_input.clone()
+            x = self.last_input.clone()
+        else:
+            x, = input
         return (torch.exp(x)-torch.exp(-x))/(torch.exp(x)+torch.exp(-x))
 
     def backward(self, *gradwrtoutput):
         gradwrtoutput, = gradwrtoutput
         output_tanh = self.forward(self.last_input)
         gradwrtinput = (1-torch.pow(output_tanh, 2))*gradwrtoutput
+        self.last_input = None
         return self.propagate_gradient(gradwrtinput)
 
 class MSELoss(Module):
@@ -198,12 +208,13 @@ class MSELoss(Module):
 
     def backward(self):
         '''loss function => no gradwrtoutput'''
-        gradwrtinput = (self.last_input[0]-self.last_input[1])*0.5
+        gradwrtinput = (self.last_input[0]-self.last_input[1])*2/30
         # print('--------------------------------------------')
         # print('mse lastinput[input]: ',self.last_input[0].shape)
         # print('mse lastinput[target]: ',self.last_input[1].shape)
         # print('mse gradwrtinput: ', gradwrtinput.shape)
         # print('--------------------------------------------')
+        self.last_input = None
         return self.propagate_gradient(gradwrtinput)
 
 class Sequential(Module):
@@ -236,3 +247,7 @@ class Sequential(Module):
     def eval(self):
         for module in self.module_list:
             module.eval()
+        
+    def train(self):
+        for module in self.module_list:
+            module.train()
