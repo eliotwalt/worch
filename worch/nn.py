@@ -24,15 +24,11 @@ class Module(object):
 
         training: bool
             boolean field indicating if the model is in training mode
-
-        device: torch.device
-            [Not implemented] Device on which to compute
         '''
         self.last_input = None
         self.previous_module = None
         self.params = []
         self.training = True
-        self.device = torch.device('cpu')
 
     def forward(self, *input):
         '''
@@ -104,30 +100,6 @@ class Module(object):
         [No output]
         '''
         raise NotImplementedError('No implementation of initialize_parameters found')
-
-    def to(self, device):
-        '''
-        worch.nn.Module.to method: switch to another computing device
-
-        [NOT IMPLEMENTED]
-
-        Parameters:
-        -----------
-        device: torch.device
-            Device to switch to
-
-        Returns:
-        --------
-        self: worch.nn.Module
-            Self reference to Module
-        '''
-        if not isinstance(device, torch.device):
-            device = torch.device(device)
-        self.device = device
-        for i in range(len(self.params)):
-            if len(self.params[i]) > 0:
-                self.params[i] = self.params[i].to(device)
-        return self
 
     def parameters(self):
         '''
@@ -239,7 +211,8 @@ class Linear(Module):
         self.out_features = out_features
         self.use_bias = bias
         # Params is [W, (b)]
-        self.params.append(torch.zeros((self.out_features, self.in_features)))
+        weight = torch.zeros((self.out_features, self.in_features))
+        self.params.append(weight)
         if self.use_bias:
             bias = torch.zeros((self.out_features, 1))
             self.params.append(bias)
@@ -265,13 +238,10 @@ class Linear(Module):
             x = self.last_input.clone()
         else:
             x, = input
-        # print('x',x.shape)
         y = torch.mm(x, self.params[0].T)
-        # print('wT',self.params[0].T.shape)
         if self.use_bias:
             y = y + self.params[1]
-        # print('y',y.shape)
-        # print()
+
         return y
 
     def backward(self, *gradwrtoutput):
@@ -301,14 +271,7 @@ class Linear(Module):
                 self.params[1].grad = b_gradient
             else:
                 self.params[1].grad += b_gradient
-        # print('--------------------------------------------')
-        # print('linear gradwrtoutput: ',gradwrtoutput.shape)
-        # print('linear lastinput: ',self.last_input.shape)
-        # print('linear W: ',self.params[0].shape)
-        # print('')
         gradwrtinput = torch.mm(gradwrtoutput, self.params[0])
-        # print('linear gradwrtinput: ', gradwrtinput.shape)
-        # print('--------------------------------------------')
         self.last_input = None
         
         return self.propagate_gradient(gradwrtinput)
@@ -327,6 +290,37 @@ class Linear(Module):
         '''
         self.params[0] = torch.nn.init.xavier_uniform_(self.params[0])
         self.params[1] = torch.nn.init.xavier_uniform_(self.params[1]).squeeze(-1)
+
+    def __repr__(self):
+        '''
+        worch.nn.Linear.__repr__ method: Get string representation of the Linear module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = f'Linear(in_features={self.in_features}, out_features={self.out_features}, bias={self.use_bias})'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.Linear.__str__ method: Get string representation of the Linear module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()
 
 class ReLU(Module):
 
@@ -377,15 +371,41 @@ class ReLU(Module):
         self.propagate_gradient(gradwrtinput)
         '''
         gradwrtoutput, = gradwrtoutput
-        # print('--------------------------------------------')
-        # print('relu gradwrtoutput: ',gradwrtoutput.shape)
-        # print('relu lastinput: ',self.last_input.shape)
         gradwrtinput = torch.ones_like(self.last_input)*gradwrtoutput
         gradwrtinput[self.last_input < 0] = 0
-        # print('relu gradwrtinput: ', gradwrtinput.shape)
-        # print('--------------------------------------------')
         self.last_input = None
         return self.propagate_gradient(gradwrtinput)
+
+    def __repr__(self):
+        '''
+        worch.nn.ReLU.__repr__ method: Get string representation of the ReLU module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = 'ReLU()'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.ReLU.__str__ method: Get string representation of the ReLU module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()
 
 class Sigmoid(Module):
 
@@ -419,21 +439,7 @@ class Sigmoid(Module):
             x = self.last_input.clone()
         else:
             x, = input
-        mask = torch.zeros_like(x)
-        positives = torch.where(x>=0, x, mask)
-        negatives = torch.where(x<0, x, mask)
-        pos_idx = x>=0
-        neg_idx = x<0
-        # Avoid overflow
-        exp_pos = torch.exp(-positives)
-        exp_pos[neg_idx] = 0
-        exp_neg = torch.exp(negatives)
-        exp_neg[pos_idx] = 0
-        sigmoid_pos = 1/(1+exp_pos)
-        sigmoid_pos[neg_idx] = 0
-        sigmoid_neg = exp_neg/(1+exp_neg)
-        sigmoid_neg[pos_idx] = 0
-        return sigmoid_pos+sigmoid_neg
+        return 1./(1.+torch.exp(-x))
 
     def backward(self, *gradwrtoutput):
         '''
@@ -450,9 +456,40 @@ class Sigmoid(Module):
         '''
         gradwrtoutput, = gradwrtoutput
         output_sigmoid = self.forward(self.last_input)
-        gradwrtinput = (output_sigmoid*(1-output_sigmoid))*gradwrtoutput
+        gradwrtinput = (output_sigmoid)*(1.-output_sigmoid)*gradwrtoutput
         self.last_input = None
         return self.propagate_gradient(gradwrtinput)
+
+    def __repr__(self):
+        '''
+        worch.nn.Sigmoid.__repr__ method: Get string representation of the Sigmoid module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = 'Sigmoid()'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.Sigmoid.__str__ method: Get string representation of the Sigmoid module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()
 
 class Tanh(Module):
 
@@ -479,7 +516,7 @@ class Tanh(Module):
         Returns:
         --------
         y: torch.Tensor
-            Tanh output
+            Sigmoidal output
         '''
         if self.training:
             self.last_input, = input
@@ -503,15 +540,46 @@ class Tanh(Module):
         '''
         gradwrtoutput, = gradwrtoutput
         output_tanh = self.forward(self.last_input)
-        gradwrtinput = (1-torch.pow(output_tanh, 2))*gradwrtoutput
+        gradwrtinput = (1.-output_tanh.pow(2))*gradwrtoutput
         self.last_input = None
         return self.propagate_gradient(gradwrtinput)
 
-class MSELoss(Module):
+    def __repr__(self):
+        '''
+        worch.nn.Tanh.__repr__ method: Get string representation of the Tanh module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = 'Tanh()'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.Tanh.__str__ method: Get string representation of the Tanh module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()
+
+class LossMSE(Module):
 
     def __init__(self):
         '''
-        worch.nn.MSELoss class: MSELoss activation
+        worch.nn.LossMSE class: LossMSE activation
         (inherited from worch.nn.Module)
 
         Parameters:
@@ -522,7 +590,7 @@ class MSELoss(Module):
 
     def forward(self, input, target):
         '''
-        worch.nn.MSELoss.forward method: forward pass
+        worch.nn.LossMSE.forward method: forward pass
 
         Parameters:
         -----------
@@ -536,15 +604,14 @@ class MSELoss(Module):
         y: torch.Tensor
             output
         '''
-        target = target.reshape(input.shape) # just in case
         if self.training:
             self.last_input = [input, target]
-        agg = torch.pow(input-target, 2)
+        agg = (input-target).float().pow(2)
         return torch.mean(agg)
 
     def backward(self):
         '''
-        worch.nn.Tanh.backward method: backward pass. Computes gradient wrt to input.
+        worch.nn.LossMSE.backward method: backward pass. Computes gradient wrt to input.
 
         Parameters:
         -----------
@@ -554,14 +621,41 @@ class MSELoss(Module):
         --------
         self.propagate_gradient(gradwrtinput)
         '''
-        gradwrtinput = (self.last_input[0]-self.last_input[1])*2/30
-        # print('--------------------------------------------')
-        # print('mse lastinput[input]: ',self.last_input[0].shape)
-        # print('mse lastinput[target]: ',self.last_input[1].shape)
-        # print('mse gradwrtinput: ', gradwrtinput.shape)
-        # print('--------------------------------------------')
+        a,b = self.last_input[0].shape
+        gradwrtinput = (self.last_input[0]-self.last_input[1]).float()*2/(a*b)
         self.last_input = None
         return self.propagate_gradient(gradwrtinput)
+
+    def __repr__(self):
+        '''
+        worch.nn.LossMSE.__repr__ method: Get string representation of the LossMSE module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = 'LossMSE()'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.LossMSE.__str__ method: Get string representation of the LossMSE module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()
 
 class Sequential(Module):
 
@@ -653,3 +747,37 @@ class Sequential(Module):
         '''
         for module in self.module_list:
             module.train()
+
+    def __repr__(self):
+        '''
+        worch.nn.Sequential.__repr__ method: Get string representation of the sequential module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        r: str
+            string representation
+        '''
+        r = 'Sequential(\n'
+        for i, mod in enumerate(self.module_list):
+            r += f'  ({i}): {mod.__repr__()}\n'
+        r += ')'
+        return r
+
+    def __str__(self):
+        '''
+        worch.nn.Sequential.__str__ method: Get string representation of the sequential module
+
+        Parameters:
+        -----------
+        [No parameter]
+
+        Returns:
+        --------
+        self.__repr__(): str
+            string representation
+        '''
+        return self.__repr__()

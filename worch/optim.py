@@ -39,7 +39,7 @@ class Optimizer(object):
         raise NotImplementedError('No implementation of step found')
 
     def zero_grad(self):
-         '''
+        '''
         worch.optim.Optimizer.zero_grad: reset gradient field of parameters to zero
 
         Parameters:
