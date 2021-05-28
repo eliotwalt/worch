@@ -30,7 +30,7 @@ def main():
         worch.nn.Sigmoid()
     )
     # Build loss and optimizer
-    crit = worch.nn.MSELoss()
+    crit = worch.nn.LossMSE()
     crit.register_previous_module(net)
     optim = worch.optim.SGD(net.parameters(), lr=opt.lr)
     # training loop
